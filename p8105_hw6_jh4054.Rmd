@@ -72,7 +72,8 @@ baltimore_df %>%
   rename(
     "OR" = estimate, 
     "95% CI lower" = conf.low, 
-    "95% CI upper" = conf.high)
+    "95% CI upper" = conf.high) %>% 
+  knitr::kable(digits = 3)
   
 # NA - add predictions to baltimore dataframe
 baltimore_df_pred = baltimore_df %>% 
@@ -82,7 +83,46 @@ baltimore_df_pred = baltimore_df %>%
 glm_baltimore %>% broom::glance()
 ```
 
-```{r}
+```{r, fig.width = 10, fig.height = 8}
+# OR for victim_racenon_white
+logfit_cities = homicide_data %>% 
+  select(city_state, hom_unsolved, victim_age, victim_race, victim_sex) %>% 
+  group_by(city_state) %>% 
+  nest() %>% 
+  mutate(
+    logfit = map(data, ~glm(hom_unsolved ~ victim_age + victim_race + victim_sex, family = binomial(), data = .)),
+    logfit = map(logfit, ~broom::tidy(., conf.int = TRUE, exponentiate = TRUE))) %>% 
+  select(city_state, logfit) %>% 
+  unnest() %>% 
+  filter(term == "victim_racenon_white") %>% 
+  select(city_state, estimate, conf.low, conf.high, p.value) %>% 
+  rename(
+    "OR" = estimate, 
+    "CI_lower" = conf.low, 
+    "CI_upper" = conf.high) %>% 
+  mutate(city_state = fct_reorder(city_state, OR))
 
+# OR and 95% CI for each city
+logfit_cities %>% 
+  arrange(OR) %>% 
+  knitr::kable(digits = 3)
+
+# plot
+OR_plot = logfit_cities %>% 
+  ggplot(aes(x = city_state, y = OR, color = city_state)) +
+  geom_point() +
+  geom_errorbar(mapping = aes(x = city_state, ymin = CI_lower, ymax = CI_upper)) + 
+  labs(
+    title = "Odds Ratio of Solving Homicide Case, Race non-white vs. white",
+    x = "City",
+    y = "Odds Ratio",
+    caption = "*Case Data collated by Washington Post") + 
+  viridis::scale_color_viridis(
+    name = "City, State", 
+    discrete = TRUE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), 
+        legend.position = "bottom")
+OR_plot
 ```
 
