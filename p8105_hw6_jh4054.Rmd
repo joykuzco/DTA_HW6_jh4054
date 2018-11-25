@@ -65,3 +65,28 @@ homicide_race = read_csv("./data/homicide-data.csv") %>%
   distinct(victim_sex)
 ```
 
+```{r}
+# df with only baltimore victims
+baltimore_df = homicide_data %>% 
+   filter(city == "Baltimore") 
+
+# glm for baltimore unsolved homicides
+glm_baltimore = 
+  baltimore_df %>%
+  glm(hom_unsolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial())
+
+# add odds ratio
+glm_baltimore %>% 
+  broom::tidy() %>% 
+  mutate(OR = exp(estimate)) %>% 
+  select(term, log_OR = estimate, OR, p.value) %>% 
+  knitr::kable(digits = 3)
+
+# add predictions to baltimore dataframe
+baltimore_df_pred = baltimore_df %>% 
+  modelr::add_predictions(glm_baltimore) %>% 
+  mutate(fitted_prob = boot::inv.logit(pred))
+
+glm_baltimore %>% broom::glance()
+```
+
