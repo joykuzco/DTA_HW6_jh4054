@@ -16,8 +16,6 @@ library(knitr)
 knitr::opts_chunk$set(
   collapse = TRUE)
 
-set.seed(1)
-
 theme_set(theme_bw() + theme(legend.position = "bottom"))
 ```
 
@@ -45,7 +43,7 @@ Load and tidy dataset
 * omit "Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO"
 * modify victim age to numeric variable
 * modify victim_race to two factor variable: white (reference) and non_white
-* create binary variable indicating whether the homicide is solved: 1 = unsolved, 0 = solved. 
+* create binary variable indicating whether the homicide is solved: 0 = unsolved, 1 = solved. 
 
 ```{r}
 #load and tidy dataset
@@ -57,44 +55,34 @@ homicide_data = read_csv("./data/homicide-data.csv") %>%
     victim_race = ifelse(victim_race == "White", "white", "non_white"),
     victim_race = fct_relevel(victim_race, c("white", "non_white")),
     victim_sex = as.factor(victim_sex),
-    hom_unsolved = ifelse(disposition != "Closed by arrest", 1, 0)) %>% 
+    hom_unsolved = as.factor(ifelse(disposition != "Closed by arrest", 0, 1))) %>% 
   filter(!(city_state %in% c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO")))
-
-homicide_race = read_csv("./data/homicide-data.csv") %>% 
-  janitor::clean_names() %>% 
-  distinct(victim_sex)
 ```
 
 ```{r}
 # df with only baltimore victims
 baltimore_df = homicide_data %>% 
-   filter(city == "Baltimore") 
+   filter(city_state == "Baltimore, MD") 
 
 # glm for baltimore unsolved homicides
-glm_baltimore = 
-  baltimore_df %>%
-  glm(hom_unsolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial())
-
-# add odds ratio
-glm_baltimore_df = glm_baltimore %>% 
-  broom::tidy() %>% 
-  mutate(OR = exp(estimate)) %>% 
-  select(term, log_OR = estimate, OR, p.value)
-
-# add confidence interval for estimates
-glm_baltimore_ci = 
-  confint(glm_baltimore) %>% 
-  broom::tidy()
-
-# rowbind
-bind_cols(glm_baltimore_df, glm_baltimore_ci) %>% 
-  knitr::kable(digits = 3)
-
-# add predictions to baltimore dataframe
+baltimore_df %>%
+  glm(hom_unsolved ~ victim_age + victim_race + victim_sex, family = binomial(), data = .) %>% 
+  broom::tidy(conf.int = TRUE, exponentiate = TRUE) %>% 
+  select(term, estimate, conf.low, conf.high, p.value) %>% 
+  rename(
+    "OR" = estimate, 
+    "95% CI lower" = conf.low, 
+    "95% CI upper" = conf.high)
+  
+# NA - add predictions to baltimore dataframe
 baltimore_df_pred = baltimore_df %>% 
   modelr::add_predictions(glm_baltimore) %>% 
   mutate(fitted_prob = boot::inv.logit(pred))
 
 glm_baltimore %>% broom::glance()
+```
+
+```{r}
+
 ```
 
