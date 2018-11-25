@@ -39,11 +39,29 @@ raw_dataset %>%
   nrow()
 ```
 
+Load and tidy dataset 
+
+* created variable city_state
+* omit "Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO"
+* modify victim age to numeric variable
+* modify victim_race to two factor variable: white (reference) and non_white
+* create binary variable indicating whether the homicide is solved: 1 = unsolved, 0 = solved. 
+
 ```{r}
 #load and tidy dataset
 homicide_data = read_csv("./data/homicide-data.csv") %>% 
   janitor::clean_names() %>% 
-  mutate(city_state = str_c(city, ", ", state)) %>% 
+  mutate(
+    city_state = str_c(city, ", ", state),
+    victim_age = as.numeric(as.factor(victim_age)),
+    victim_race = ifelse(victim_race == "White", "white", "non_white"),
+    victim_race = fct_relevel(victim_race, c("white", "non_white")),
+    victim_sex = as.factor(victim_sex),
+    hom_unsolved = ifelse(disposition != "Closed by arrest", 1, 0)) %>% 
   filter(!(city_state %in% c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO")))
+
+homicide_race = read_csv("./data/homicide-data.csv") %>% 
+  janitor::clean_names() %>% 
+  distinct(victim_sex)
 ```
 
