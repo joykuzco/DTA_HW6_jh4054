@@ -2,29 +2,48 @@
 title: "p8105_hw6_jh4054"
 author: "Joy Hsu"
 date: "11/24/2018"
-output: html_document
+output: 
+    html_document:
+      toc: true
+      toc_float: true
+      code_folding: show
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+
+knitr::opts_chunk$set(
+  collapse = TRUE)
+
+set.seed(1)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
 ```
 
-## R Markdown
+### Problem 1
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+The homicide dataset was collated by Washington Post on 52179 homicide cases in 50 major US cities, from 2007 to 2015. Altogether, 28 states are represented. The raw dimensions are 52179 rows by 12 columns variables. Each case is reported as a distinct row, with demographic information on the victim's name, age, sex, and race. Attributes regarding the homicide incident include geospatial coordinates, reported date, city, and disposition of the police case. 
+```{r}
+#examine raw dataset
+raw_dataset = read_csv("./data/homicide-data.csv")
+dim(raw_dataset)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+#represented states and cities
+raw_dataset %>% 
+  distinct(state) %>% 
+  nrow()
 
-```{r cars}
-summary(cars)
+raw_dataset %>% 
+  distinct(city) %>% 
+  nrow()
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+#load and tidy dataset
+homicide_data = read_csv("./data/homicide-data.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(city_state = str_c(city, ", ", state)) %>% 
+  filter(!(city_state %in% c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO")))
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
