@@ -76,10 +76,18 @@ glm_baltimore =
   glm(hom_unsolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial())
 
 # add odds ratio
-glm_baltimore %>% 
+glm_baltimore_df = glm_baltimore %>% 
   broom::tidy() %>% 
   mutate(OR = exp(estimate)) %>% 
-  select(term, log_OR = estimate, OR, p.value) %>% 
+  select(term, log_OR = estimate, OR, p.value)
+
+# add confidence interval for estimates
+glm_baltimore_ci = 
+  confint(glm_baltimore) %>% 
+  broom::tidy()
+
+# rowbind
+bind_cols(glm_baltimore_df, glm_baltimore_ci) %>% 
   knitr::kable(digits = 3)
 
 # add predictions to baltimore dataframe
