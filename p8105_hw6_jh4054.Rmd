@@ -126,3 +126,12 @@ OR_plot = logfit_cities %>%
 OR_plot
 ```
 
+### Problem 2
+
+```{r}
+bw = read_csv("./data/birthweight.csv")
+
+bw = bw %>% 
+```
+
+
