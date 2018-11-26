@@ -132,6 +132,31 @@ OR_plot
 bw = read_csv("./data/birthweight.csv")
 
 bw = bw %>% 
+  mutate(
+    babysex = as.factor(recode(babysex, "1" = "male", "2" = "female")),
+    frace = factor(frace, levels = c(1, 2, 3, 4, 8), labels = c("white", "black", "asian", "puerto_rican", "other")),
+    mrace = factor(mrace, levels = c(1, 2, 3, 4), labels = c("white", "black", "asian", "puerto_rican")),
+    malform = factor(malform, levels = c(0, 1), labels = c("absent", "present")))
+
+str(bw)
+
+fit1 = lm(bwt ~ ., data = bw)
+
+fit1 %>% broom::tidy() %>% arrange(p.value)
+
+GGally::ggpairs(pat_satisfaction)
+
+bw %>% distinct(frace)
+
+```
+
+Correlation Matrix for bw
+
+```{r}
+
+GGally::ggpairs(bw)
+pairs(bw)
+cor(bw)
 ```
 
 
