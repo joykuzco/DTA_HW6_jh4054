@@ -142,6 +142,8 @@ str(bw)
 
 fit1 = lm(bwt ~ ., data = bw)
 
+summary(fit1)
+
 fit1 %>% broom::tidy() %>% arrange(p.value)
 
 GGally::ggpairs(pat_satisfaction)
@@ -150,13 +152,170 @@ bw %>% distinct(frace)
 
 ```
 
-Correlation Matrix for bw
+### Histogram for bw
+
+Check normality distribution of the response variable birthweight
+```{r}
+bw %>% 
+  ggplot(aes(x = bwt)) +
+  geom_histogram()
+```
+
+### Correlation Matrix for bw
+
+* identify collinear variables, exclude from model selection process
 
 ```{r}
-
 GGally::ggpairs(bw)
 pairs(bw)
 cor(bw)
 ```
 
+### Stepwise Selection
+
+```{r}
+library(leaps)
+
+# Specify full and null models for forward & backward selection based on AIC Criteria
+null = lm(bwt ~ 1, data = bw)
+null
+
+full = lm(bwt ~ ., data = bw)
+full
+```
+
+**Stepwise Forward Selection**
+
+Best Model that minimizes AIC. According to this procedure, the best model is the one that includes the variables *bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome*
+
+Step:  AIC=48706.22
+bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + 
+    babysex + parity + ppwt + fincome
+
+           Df Sum of Sq       RSS   AIC
+<none>                  321048783 48706
++ menarche  1     99033 320949751 48707
++ mheight   1     71194 320977589 48707
++ momage    1     12410 321036373 48708
++ malform   1      1734 321047050 48708
++ frace     4    130628 320918155 48712
+
+```{r}
+# command for forward selection
+# This tells R to start with the null model and search through models lying in the range between the null and full model using the forward selection algorithm. It gives rise to the following output:
+step(null, scope=list(lower=null, upper=full), direction="forward")
+
+step(full, data = bw, direction="backward")
+```
+
+**Stepwise Backward Elimination**
+
+Algorithm give rise to results that are equivalent to the forward selection procedure. 
+
+Step:  AIC=48705.38
+bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + 
+    mheight + mrace + parity + ppwt + smoken
+
+          Df Sum of Sq       RSS   AIC
+<none>                 320986412 48705
+- fincome  1    245637 321232048 48707
+- parity   1    422770 321409181 48709
+- babysex  1    846134 321832545 48715
+- mheight  1   1012240 321998651 48717
+- ppwt     1   2907049 323893461 48743
+- gaweeks  1   4662501 325648912 48766
+- smoken   1   5073849 326060260 48771
+- delwt    1   8137459 329123871 48812
+- mrace    3  14683609 335670021 48894
+- blength  1 102191779 423178191 49903
+- bhead    1 106779754 427766166 49950
+
+We can perform backward elimination on the same data set using the command:
+
+```{r}
+step(full, data = bw, direction="backward")
+```
+
+**stepwise regression, both directions**
+
+```{r}
+step(null, scope = list(upper=full), data = bw, direction="both")
+```
+
+### **regsubsets()** - regression subset selection
+
+The all possible regressions approach considers all possible subsets of the pool
+of explanatory variables and finds the model that best fits the data according to
+some criteria (e.g. Adjusted R2, AIC and BIC). These criteria assign scores to
+each model and allow us to choose the model with the best score.
+
+* The model containing babysex, bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, smoken, pnumsga minimizes the **adjusted R-square criteria** The top 6 models in the adj R2 plot have roughly the same R2.
+* The model containing same variables babysex, bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, smoken, pnumsga *also* minimizes the **BIC criteria**
+* cannot just keep one factor of mrace and frace
+
+```{r}
+leaps = leaps::regsubsets(bwt ~ ., data = bw)
+summary(leaps)
+
+# View the ranked models according to the adjusted r-squared criteria and BIC, respectively
+# black indicates that a variable is included in the model, white not included. 
+# Model containing babysex, bhead, blength, delwt, gaweeks, smoken, pnumsga
+plot(leaps, scale = "adjr2")
+plot(leaps, scale = "bic")
+```
+
+### Check Model Diagnostics for 2 Candidate Models
+
+**Candidate Models:**
+
+1. Stepwise Backward Elimination (same model as forward selection and stepwise regression)
+bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome
+
+2. Based on adjusted R-square criteria. Removed frace since adds little benefit to adjR2. Keep all of mrace, since cannot only include one factor in variable
+bwt ~ babysex + bhead + blength + delwt + frace:puerto_rican + gaweeks + mraceblack + smoken + pnumsga 
+
+```{r}
+# Stepwise Backward Elimination
+fit_step = lm(bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome, data = bw)
+summary(fit_step)
+
+# adjusted R-square criteria
+fit_rsquare = lm(bwt ~ babysex + bhead + blength + delwt + gaweeks + mrace + smoken + pnumsga, data = bw)
+
+summary(fit_sbe)
+summary(fit_rsquare)
+```
+
+**Check Conditions:**
+
+1. linear relationship between (numerical) x and y
+    * each numerical explanatory variable should be linearly related to the response variable, birthweight
+    * check using residuals plot (e vs. x)
+    * look for random scatter around 0
+2. nearly normal residuals with mean 0
+    * on a residuals plot, we look for random scatter of residuals around 0, this translates to a nearly normal distribution of residuals centered at 0
+    * check using histogram of residuals or normal probability plot
+3. constant variability of residuals 
+    * check using residuals plots of residuals vs. predicted value (e vs. y_hat)
+        * residuals should be equally variable for low and high values of the predicted response variable
+        * residuals randomly scattered in a band with a constant width around 0 (no fan shaped)
+4. independent residuals 
+
+#### 1. 
+
+```{r}
+bw_fit_step = modelr::add_predictions(bw, fit_step, var = "pred_step")
+bw_fit_step = modelr::add_residuals(bw_fit_step, fit_step, var = "resid_step")
+
+bw_fit_step %>% 
+  ggplot(aes(x = pred_step, y = resid_step)) +
+  geom_point()
+
+# evaliate nearly normal residuals with 
+hist(fit_step$residuals)
+
+bw_fit_step %>% 
+  ggplot(aes(x = resid_step)) +
+  geom_histogram()
+```
 
