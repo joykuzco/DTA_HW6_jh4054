@@ -74,13 +74,6 @@ baltimore_df %>%
     "95% CI lower" = conf.low, 
     "95% CI upper" = conf.high) %>% 
   knitr::kable(digits = 3)
-  
-# NA - add predictions to baltimore dataframe
-baltimore_df_pred = baltimore_df %>% 
-  modelr::add_predictions(glm_baltimore) %>% 
-  mutate(fitted_prob = boot::inv.logit(pred))
-
-glm_baltimore %>% broom::glance()
 ```
 
 ```{r, fig.width = 10, fig.height = 8}
@@ -141,15 +134,8 @@ bw = bw %>%
 str(bw)
 
 fit1 = lm(bwt ~ ., data = bw)
-
 summary(fit1)
-
 fit1 %>% broom::tidy() %>% arrange(p.value)
-
-GGally::ggpairs(pat_satisfaction)
-
-bw %>% distinct(frace)
-
 ```
 
 ### Histogram for bw
@@ -165,7 +151,7 @@ bw %>%
 
 * identify collinear variables, exclude from model selection process
 
-```{r}
+```{r, eval=FALSE}
 GGally::ggpairs(bw)
 pairs(bw)
 cor(bw)
@@ -275,15 +261,21 @@ bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + par
 bwt ~ babysex + bhead + blength + delwt + frace:puerto_rican + gaweeks + mraceblack + smoken + pnumsga 
 
 ```{r}
-# Stepwise Backward Elimination
+# Stepwise Backward Elimination Model
 fit_step = lm(bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome, data = bw)
 summary(fit_step)
 
-# adjusted R-square criteria
-fit_rsquare = lm(bwt ~ babysex + bhead + blength + delwt + gaweeks + mrace + smoken + pnumsga, data = bw)
+# add predictions and residuals to stepwise model
+bw_fit_step = modelr::add_predictions(bw, fit_step, var = "pred_step")
+bw_fit_step = modelr::add_residuals(bw_fit_step, fit_step, var = "resid_step")
 
-summary(fit_sbe)
-summary(fit_rsquare)
+# adjusted R-square criteria Model
+fit_rs = lm(bwt ~ babysex + bhead + blength + delwt + gaweeks + mrace + smoken + pnumsga, data = bw)
+summary(fit_rs)
+
+# add predictions and residuals to adjusted r-square model
+bw_fit_rs = modelr::add_predictions(bw, fit_step, var = "pred_rs")
+bw_fit_rs = modelr::add_residuals(bw_fit_step, fit_step, var = "resid_rs")
 ```
 
 **Check Conditions:**
@@ -301,21 +293,80 @@ summary(fit_rsquare)
         * residuals randomly scattered in a band with a constant width around 0 (no fan shaped)
 4. independent residuals 
 
-#### 1. 
+#### 1. linear relationship between explanatory variables (x) and response variable (y)
 
 ```{r}
-bw_fit_step = modelr::add_predictions(bw, fit_step, var = "pred_step")
-bw_fit_step = modelr::add_residuals(bw_fit_step, fit_step, var = "resid_step")
+plot(fit_step$residuals ~ bw$bhead)
+plot(fit_step$residuals ~ bw$blength)
+plot(fit_step$residuals ~ bw$delwt)
+plot(fit_step$residuals ~ bw$gaweeks)
+plot(fit_step$residuals ~ bw$smoken)
+plot(fit_step$residuals ~ bw$ppbmi)
+plot(fit_step$residuals ~ bw$parity)
+plot(fit_step$residuals ~ bw$fincome)
 
 bw_fit_step %>% 
-  ggplot(aes(x = pred_step, y = resid_step)) +
+  ggplot(aes(x = bhead, y = resid_step)) +
   geom_point()
+```
 
-# evaliate nearly normal residuals with 
+#### 2. Normality of Residuals (error distribution)
+
+Acceptible normality per Normal Q-Q Plot and Histogram of Residuals
+
+###### **Stepwise Model QQ-Plot & Histogram**
+```{r}
+# evaluate normality of residuals with qq plot
+qqnorm(fit_step$residuals)
+qqline(fit_step$residuals)
+
+# evaluate normality of residuals with histogram
 hist(fit_step$residuals)
 
 bw_fit_step %>% 
   ggplot(aes(x = resid_step)) +
   geom_histogram()
 ```
+
+###### **R-Square Model QQ-Plot & Histogram**
+```{r}
+# evaluate normality of residuals with qq plot
+qqnorm(fit_rs$residuals)
+qqline(fit_rs$residuals)
+
+# evaluate normality of residuals with histogram
+hist(fit_rs$residuals)
+
+bw_fit_rs %>% 
+  ggplot(aes(x = resid_step)) +
+  geom_histogram()
+```
+
+#### 3. **Homoscedasticity: Constant variance of residuals (errors)**
+
+```{r}
+bw_fit_step %>% 
+  ggplot(aes(x = pred_step, y = resid_step)) +
+  geom_point(alpha = 0.5)
+
+# stepwise model: residuals plot of residuals vs. predicted value
+plot(fit_step$residuals ~ fit_step$fitted.values)
+
+# adjusted r-square model: residuals plot of residuals vs. predicted value
+plot(fit_rs$residuals ~ fit_rs$fitted.values)
+```
+
+#### 4. Independence of residuals (errors)
+
+```{r}
+plot(fit_step$residuals)
+plot(fit_rs$residuals)
+```
+
+### Select Model
+
+Both the stepwise regression model and adjusted r-squared model satisfied the four principal assumptions that justify the use of a linear regression model. 
+
+We prefer the parsimonious model, the simplest best model, thus we will select the R~2~(adj) model with 8 predictors over the stepwise regression model with 11 predictors.
+
 
