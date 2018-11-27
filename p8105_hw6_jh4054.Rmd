@@ -21,7 +21,7 @@ theme_set(theme_bw() + theme(legend.position = "bottom"))
 
 ### Problem 1
 
-The homicide dataset was collated by Washington Post on 52179 homicide cases in 50 major US cities, from 2007 to 2015. Altogether, 28 states are represented. The raw dimensions are 52179 rows by 12 columns variables. Each case is reported as a distinct row, with demographic information on the victim's name, age, sex, and race. Attributes regarding the homicide incident include geospatial coordinates, reported date, city, and disposition of the police case. 
+The raw homicide dataset was collated by Washington Post on 52179 homicide cases in 50 major US cities, from 2007 to 2015. Altogether, 28 states are represented. The raw dimensions are 52179 rows by 12 columns variables. Each case is reported as a distinct row, with demographic information on the victim's name, age, sex, and race. Attributes regarding the homicide incident include geospatial coordinates, reported date, city, and disposition of the police case. 
 ```{r}
 #examine raw dataset
 raw_dataset = read_csv("./data/homicide-data.csv")
@@ -37,13 +37,14 @@ raw_dataset %>%
   nrow()
 ```
 
-Load and tidy dataset 
+We will investigate the odds ratio of solving a homicide for white versus non-white victims. First, we tidy the dataset with the following steps:
 
-* created variable city_state
-* omit "Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO"
+* create city_state variable
+* omit observations from "Dallas, TX", "Phoenix, AZ", "Kansas City, MO", these locations omit victim race. Omit "Tulsa, AL", erroneous entry. 
 * modify victim age to numeric variable
 * modify victim_race to two factor variable: white (reference) and non_white
-* create binary variable indicating whether the homicide is solved: 0 = unsolved, 1 = solved. 
+* modify victim_sex to factor variable: Male, Female, Unknown
+* create binary variable indicating whether homicide is solved: 0 = unsolved, 1 = solved. 
 
 ```{r}
 #load and tidy dataset
@@ -57,27 +58,40 @@ homicide_data = read_csv("./data/homicide-data.csv") %>%
     victim_sex = as.factor(victim_sex),
     hom_unsolved = as.factor(ifelse(disposition != "Closed by arrest", 0, 1))) %>% 
   filter(!(city_state %in% c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO")))
+
+str(homicide_data)
 ```
 
+#### Baltimore, MD
+
+For the city of Baltimore, MD, we fit a logistic regression with resolved versus unresolved homicide as the outcome and victim age, sex, and race (white vs. non-white) as predictors. The odds of solving a homicide case for a non-white victim in Baltimore, MD is on average 0.452 (95% CI: 0.321, 0.636) times the odds for a white homicide victim, keeping all other variables constant.
+
 ```{r}
-# df with only baltimore victims
+# filter dataframe for baltimore victims only
 baltimore_df = homicide_data %>% 
    filter(city_state == "Baltimore, MD") 
 
 # glm for baltimore unsolved homicides
-baltimore_df %>%
-  glm(hom_unsolved ~ victim_age + victim_race + victim_sex, family = binomial(), data = .) %>% 
-  broom::tidy(conf.int = TRUE, exponentiate = TRUE) %>% 
+glm_baltimore = baltimore_df %>%
+  glm(hom_unsolved ~ victim_age + victim_race + victim_sex, family = binomial(), data = .)
+
+# table for adjusted odds ratio, 95% Confidence Interval, p-value 
+glm_baltimore %>% broom::tidy(conf.int = TRUE, exponentiate = TRUE) %>% 
   select(term, estimate, conf.low, conf.high, p.value) %>% 
   rename(
     "OR" = estimate, 
     "95% CI lower" = conf.low, 
     "95% CI upper" = conf.high) %>% 
+  filter(term == "victim_racenon_white")
   knitr::kable(digits = 3)
 ```
 
-```{r, fig.width = 10, fig.height = 8}
-# OR for victim_racenon_white
+#### All Cities
+
+The Odds Ratio and 95% Confidence Interval for solving a homicide case for a non-white victim versus a white victim is reported for 47 major US cities.
+
+```{r, fig.width = 10, fig.height = 6}
+# Odds Ratio for victim_racenon_white in 47 cities
 logfit_cities = homicide_data %>% 
   select(city_state, hom_unsolved, victim_age, victim_race, victim_sex) %>% 
   group_by(city_state) %>% 
@@ -119,16 +133,22 @@ OR_plot = logfit_cities %>%
 OR_plot
 ```
 
-### Problem 2
+### Problem 2.1 - Propose Model
 
-Exclude two variables that have values of "0" for all observations. 
+In this section, we will investigate the birthweight dataset and propose a regression model for birthweight. 
 
-* pnumlbw: previous number of low birth weight babies
-* pnumgsa: number of prior small for gestational age babies
+First, we tidy the dataset: 
+
+* exclude following two variables with values "0" for all observations.  
+    * pnumlbw: previous number of low birth weight babies
+    * pnumgsa: number of prior small for gestational age babies
+* convert baby sex, father race, mother race, and malformations to factor variables
 
 ```{r}
+# load birthweight dataset
 bw = read_csv("./data/birthweight.csv")
 
+# tidy dataset
 bw = bw %>% 
   mutate(
     babysex = as.factor(recode(babysex, "1" = "male", "2" = "female")),
@@ -138,10 +158,6 @@ bw = bw %>%
   select(-pnumlbw, -pnumsga)
 
 str(bw)
-
-fit1 = lm(bwt ~ ., data = bw)
-summary(fit1)
-fit1 %>% broom::tidy() %>% arrange(p.value)
 ```
 
 ### Histogram for bw
