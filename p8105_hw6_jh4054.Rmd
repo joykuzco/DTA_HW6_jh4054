@@ -383,7 +383,28 @@ summary(fit_3)
 cv_bw = modelr::crossv_mc(data = bw, n = 100, test = 0.2, id = "id")
 
 cv_bw = cv_bw %>% 
-  mutate
+  mutate(lm_rs = map(train, ~lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken, data = .x)),
+         lm_2 = map(train, ~lm(bwt ~ blength, gaweeks, data = bw)),
+         lm_3 = map(train, ~lm(bwt ~ bhead * blength * babysex, data = bw))) %>% 
+  mutate(rmse_rs = map2_dbl(lm_rs, test, ~rmse(model = .x, data = .y)),
+         rmse_2 = map2_dbl(lm_2, test, ~rmse(model = .x, data = .y)),
+         rmse_3 = map2_dbl(lm_3, test, ~rmse(model = .x, data = .y)))
 ```
 
+Violin Plot of RMSE
+```{r}
+cv_bw %>% 
+  select(starts_with("rmse")) %>% 
+  gather(key = model, value = rmse) %>% 
+  mutate(
+    model = str_replace(model, "rmse_", ""),
+    model = str_replace(model, "2", "2_predictors"),
+    model = str_replace(model, "3", "3_predictors"),
+    model = fct_reorder(model, rmse)) %>% 
+  ggplot(aes(x = model, y = rmse)) + 
+    geom_violin() +
+  labs(title = "Distribution of RMSE, Violin Plots", 
+    x = "Model", 
+    y = "RMSE")
+```
 
