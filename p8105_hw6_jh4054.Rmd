@@ -121,6 +121,11 @@ OR_plot
 
 ### Problem 2
 
+Exclude two variables that have values of "0" for all observations. 
+
+* pnumlbw: previous number of low birth weight babies
+* pnumgsa: number of prior small for gestational age babies
+
 ```{r}
 bw = read_csv("./data/birthweight.csv")
 
@@ -129,7 +134,8 @@ bw = bw %>%
     babysex = as.factor(recode(babysex, "1" = "male", "2" = "female")),
     frace = factor(frace, levels = c(1, 2, 3, 4, 8), labels = c("white", "black", "asian", "puerto_rican", "other")),
     mrace = factor(mrace, levels = c(1, 2, 3, 4), labels = c("white", "black", "asian", "puerto_rican")),
-    malform = factor(malform, levels = c(0, 1), labels = c("absent", "present")))
+    malform = factor(malform, levels = c(0, 1), labels = c("absent", "present"))) %>% 
+  select(-pnumlbw, -pnumsga)
 
 str(bw)
 
@@ -141,6 +147,7 @@ fit1 %>% broom::tidy() %>% arrange(p.value)
 ### Histogram for bw
 
 Check normality distribution of the response variable birthweight
+
 ```{r}
 bw %>% 
   ggplot(aes(x = bwt)) +
@@ -178,51 +185,30 @@ Step:  AIC=48706.22
 bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + 
     babysex + parity + ppwt + fincome
 
-           Df Sum of Sq       RSS   AIC
-<none>                  321048783 48706
-+ menarche  1     99033 320949751 48707
-+ mheight   1     71194 320977589 48707
-+ momage    1     12410 321036373 48708
-+ malform   1      1734 321047050 48708
-+ frace     4    130628 320918155 48712
-
 ```{r}
 # command for forward selection
 # This tells R to start with the null model and search through models lying in the range between the null and full model using the forward selection algorithm. It gives rise to the following output:
 step(null, scope=list(lower=null, upper=full), direction="forward")
-
-step(full, data = bw, direction="backward")
 ```
 
 **Stepwise Backward Elimination**
 
-Algorithm give rise to results that are equivalent to the forward selection procedure. 
+Algorithm give rise to results are equivalent to the forward selection procedure. 
 
 Step:  AIC=48705.38
 bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + 
     mheight + mrace + parity + ppwt + smoken
 
-          Df Sum of Sq       RSS   AIC
-<none>                 320986412 48705
-- fincome  1    245637 321232048 48707
-- parity   1    422770 321409181 48709
-- babysex  1    846134 321832545 48715
-- mheight  1   1012240 321998651 48717
-- ppwt     1   2907049 323893461 48743
-- gaweeks  1   4662501 325648912 48766
-- smoken   1   5073849 326060260 48771
-- delwt    1   8137459 329123871 48812
-- mrace    3  14683609 335670021 48894
-- blength  1 102191779 423178191 49903
-- bhead    1 106779754 427766166 49950
-
-We can perform backward elimination on the same data set using the command:
-
 ```{r}
+# perform stepwise backward selection
 step(full, data = bw, direction="backward")
 ```
 
 **stepwise regression, both directions**
+
+Step:  AIC=48706.22
+bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + 
+    babysex + parity + ppwt + fincome
 
 ```{r}
 step(null, scope = list(upper=full), data = bw, direction="both")
@@ -235,13 +221,17 @@ of explanatory variables and finds the model that best fits the data according t
 some criteria (e.g. Adjusted R2, AIC and BIC). These criteria assign scores to
 each model and allow us to choose the model with the best score.
 
-* The model containing babysex, bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, smoken, pnumsga minimizes the **adjusted R-square criteria** The top 6 models in the adj R2 plot have roughly the same R2.
-* The model containing same variables babysex, bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, smoken, pnumsga *also* minimizes the **BIC criteria**
-* cannot just keep one factor of mrace and frace
+* The model containing bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, ppbmi, and smoken minimizes the **adjusted R-square criteria**. The top 5 models in the R~2~(adj) plot have roughly the same R~2~(adj).
+* The same model containing variables bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, ppbmi, and smoken also minimizes the **BIC criteria**.
+* There is not significant improvement in R~2~(adj) by keeping frace:puerto_rican. * From this exploration, we will retain the following as a candidate model
+
+**bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken**
 
 ```{r}
 leaps = leaps::regsubsets(bwt ~ ., data = bw)
-summary(leaps)
+
+fit2 = lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken, data = bw)
+summary(fit2)
 
 # View the ranked models according to the adjusted r-squared criteria and BIC, respectively
 # black indicates that a variable is included in the model, white not included. 
@@ -261,21 +251,22 @@ bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + par
 bwt ~ babysex + bhead + blength + delwt + frace:puerto_rican + gaweeks + mraceblack + smoken + pnumsga 
 
 ```{r}
-# Stepwise Backward Elimination Model
-fit_step = lm(bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome, data = bw)
+# Candidate 1: Stepwise Backward Elimination Model, 11 predictors
+fit_step = lm(bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + 
+    mheight + mrace + parity + ppwt + smoken, data = bw)
 summary(fit_step)
 
 # add predictions and residuals to stepwise model
 bw_fit_step = modelr::add_predictions(bw, fit_step, var = "pred_step")
 bw_fit_step = modelr::add_residuals(bw_fit_step, fit_step, var = "resid_step")
 
-# adjusted R-square criteria Model
-fit_rs = lm(bwt ~ babysex + bhead + blength + delwt + gaweeks + mrace + smoken + pnumsga, data = bw)
+# Candidate 2: adjusted R-square Model, 7 predictors
+fit_rs = lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken, data = bw)
 summary(fit_rs)
 
 # add predictions and residuals to adjusted r-square model
-bw_fit_rs = modelr::add_predictions(bw, fit_step, var = "pred_rs")
-bw_fit_rs = modelr::add_residuals(bw_fit_step, fit_step, var = "resid_rs")
+bw_fit_rs = modelr::add_predictions(bw, fit_rs, var = "pred_rs")
+bw_fit_rs = modelr::add_residuals(bw_fit_rs, fit_rs, var = "resid_rs")
 ```
 
 **Check Conditions:**
@@ -295,20 +286,7 @@ bw_fit_rs = modelr::add_residuals(bw_fit_step, fit_step, var = "resid_rs")
 
 #### 1. linear relationship between explanatory variables (x) and response variable (y)
 
-```{r}
-plot(fit_step$residuals ~ bw$bhead)
-plot(fit_step$residuals ~ bw$blength)
-plot(fit_step$residuals ~ bw$delwt)
-plot(fit_step$residuals ~ bw$gaweeks)
-plot(fit_step$residuals ~ bw$smoken)
-plot(fit_step$residuals ~ bw$ppbmi)
-plot(fit_step$residuals ~ bw$parity)
-plot(fit_step$residuals ~ bw$fincome)
-
-bw_fit_step %>% 
-  ggplot(aes(x = bhead, y = resid_step)) +
-  geom_point()
-```
+Don't need to do this for assignment
 
 #### 2. Normality of Residuals (error distribution)
 
@@ -345,9 +323,13 @@ bw_fit_rs %>%
 #### 3. **Homoscedasticity: Constant variance of residuals (errors)**
 
 ```{r}
+bw_fit_rs %>% 
+  ggplot(aes(x = pred_rs, y = resid_rs)) +
+  geom_point(alpha = 0.3)
+
 bw_fit_step %>% 
   ggplot(aes(x = pred_step, y = resid_step)) +
-  geom_point(alpha = 0.5)
+  geom_point(alpha = 0.3)
 
 # stepwise model: residuals plot of residuals vs. predicted value
 plot(fit_step$residuals ~ fit_step$fitted.values)
@@ -356,7 +338,7 @@ plot(fit_step$residuals ~ fit_step$fitted.values)
 plot(fit_rs$residuals ~ fit_rs$fitted.values)
 ```
 
-#### 4. Independence of residuals (errors)
+#### 4. Independence of residuals (errors) - NA for assignment
 
 ```{r}
 plot(fit_step$residuals)
@@ -365,8 +347,43 @@ plot(fit_rs$residuals)
 
 ### Select Model
 
-Both the stepwise regression model and adjusted r-squared model satisfied the four principal assumptions that justify the use of a linear regression model. 
+Both the backwards elimination model and adjusted r-squared model satisfied assumptions for 1) normality of residuals and 2) constant variance of residuals.
 
-We prefer the parsimonious model, the simplest best model, thus we will select the R~2~(adj) model with 8 predictors over the stepwise regression model with 11 predictors.
+We prefer the parsimonious model, the simplest best model. Thus, we will select the R~2~(adj) model with 7 predictors over the backwards elimination model with 11 predictors.
+
+Lastly, we will check collinearity of variables in the 7 predictor model using a 1) correlation matrix and 2) VIF (variance inflation factor) Scores, which measure how much of the variance of a regression coefficient is inflated due to multicollinearity within the model. 
+
+```{r}
+fit_rs %>% broom::tidy() %>% knitr::kable()
+fit_rs %>% broom::glance() %>% knitr::kable()
+summary(fit_rs)
+
+# check for collinearity between numerical predictor variables
+bw_fit_rs %>% 
+  select(bwt, bhead, blength, delwt, gaweeks, ppbmi, smoken) %>% 
+  GGally::ggpairs()
+
+# Evaluate VIF Scores
+car::vif(fit_rs)
+```
+
+### Cross-Validation Compare Models
+
+```{r}
+# two predictor model
+fit_2 = lm(bwt ~ blength, gaweeks, data = bw)
+summary(fit_2)
+
+# 3 way interaction model
+fit_3 = lm(bwt ~ bhead * blength * babysex, data = bw)
+summary(fit_3)
+```
+
+```{r}
+cv_bw = modelr::crossv_mc(data = bw, n = 100, test = 0.2, id = "id")
+
+cv_bw = cv_bw %>% 
+  mutate
+```
 
 
