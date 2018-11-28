@@ -12,9 +12,13 @@ output:
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(knitr)
+library(modelr)
+library(mgcv)
 
 knitr::opts_chunk$set(
   collapse = TRUE)
+
+set.seed(1)
 
 theme_set(theme_bw() + theme(legend.position = "bottom"))
 ```
@@ -82,7 +86,7 @@ glm_baltimore %>% broom::tidy(conf.int = TRUE, exponentiate = TRUE) %>%
     "OR" = estimate, 
     "95% CI lower" = conf.low, 
     "95% CI upper" = conf.high) %>% 
-  filter(term == "victim_racenon_white")
+  filter(term == "victim_racenon_white") %>% 
   knitr::kable(digits = 3)
 ```
 
@@ -137,7 +141,11 @@ OR_plot
 
 In this section, we will investigate the birthweight dataset and propose a regression model for birthweight. 
 
-First, we tidy the dataset: 
+We will start our approach to model building by exploring the distribution of the main response. Next, we will select 2 model candidates from 1) stepwise backwards elimination and 2) optimization of the adjusted R~2~ criteria. Candidates will be assessed for linear regression model assumptions, normality of the residuals and homoscadescity of residuals. Lastly, candidates will be compared for parsimony and assessed for multicollinearity. 
+
+###### **Data Cleaning**
+
+Data Cleaning Steps
 
 * exclude following two variables with values "0" for all observations.  
     * pnumlbw: previous number of low birth weight babies
@@ -156,13 +164,11 @@ bw = bw %>%
     mrace = factor(mrace, levels = c(1, 2, 3, 4), labels = c("white", "black", "asian", "puerto_rican")),
     malform = factor(malform, levels = c(0, 1), labels = c("absent", "present"))) %>% 
   select(-pnumlbw, -pnumsga)
-
-str(bw)
 ```
 
-### Histogram for bw
+###### **Birthweight Histogram**
 
-Check normality distribution of the response variable birthweight
+Distribution of the main response birthweight approximates a normal distribution.
 
 ```{r}
 bw %>% 
@@ -170,17 +176,12 @@ bw %>%
   geom_histogram()
 ```
 
-### Correlation Matrix for bw
+###### **Stepwise Backward Elimation**
 
-* identify collinear variables, exclude from model selection process
+Using an automatic search function that minimizes AIC using stepwise backward elimination, we obtain model candidate 1:
 
-```{r, eval=FALSE}
-GGally::ggpairs(bw)
-pairs(bw)
-cor(bw)
-```
-
-### Stepwise Selection
+Step:  AIC=48705.38
+bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken
 
 ```{r}
 library(leaps)
@@ -191,85 +192,49 @@ null
 
 full = lm(bwt ~ ., data = bw)
 full
-```
 
-**Stepwise Forward Selection**
-
-Best Model that minimizes AIC. According to this procedure, the best model is the one that includes the variables *bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome*
-
-Step:  AIC=48706.22
-bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + 
-    babysex + parity + ppwt + fincome
-
-```{r}
-# command for forward selection
-# This tells R to start with the null model and search through models lying in the range between the null and full model using the forward selection algorithm. It gives rise to the following output:
-step(null, scope=list(lower=null, upper=full), direction="forward")
-```
-
-**Stepwise Backward Elimination**
-
-Algorithm give rise to results are equivalent to the forward selection procedure. 
-
-Step:  AIC=48705.38
-bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + 
-    mheight + mrace + parity + ppwt + smoken
-
-```{r}
 # perform stepwise backward selection
 step(full, data = bw, direction="backward")
 ```
 
-**stepwise regression, both directions**
+###### **regsubsets()** - regression subset selection
 
-Step:  AIC=48706.22
-bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + 
-    babysex + parity + ppwt + fincome
+The all possible regressions approach considers all possible subsets of the pool of explanatory variables and finds the model that best fits the data according to some criteria (e.g. Adjusted R~2~ and BIC). These criteria assign scores to each model and allow us to choose the model with the best score.
 
-```{r}
-step(null, scope = list(upper=full), data = bw, direction="both")
-```
+* The model containing explanatory variables bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, ppbmi, and smoken optimizes the **adjusted R~2~ criteria** and minimizes the **BIC criteria**. 
+* The top 5 models in the R~2~(adj) plot have roughly the same R~2~(adj). Since there is marginal improvement in the R~2~(adj) score by including frace:puerto_rican, we will exclude father race (frace) from the candidate model. 
+* Since we must include all factors within a variable, we will retain mother race (mrace). 
 
-### **regsubsets()** - regression subset selection
+From this exploration, we obtain model candidtate 2: 
 
-The all possible regressions approach considers all possible subsets of the pool
-of explanatory variables and finds the model that best fits the data according to
-some criteria (e.g. Adjusted R2, AIC and BIC). These criteria assign scores to
-each model and allow us to choose the model with the best score.
-
-* The model containing bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, ppbmi, and smoken minimizes the **adjusted R-square criteria**. The top 5 models in the R~2~(adj) plot have roughly the same R~2~(adj).
-* The same model containing variables bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, ppbmi, and smoken also minimizes the **BIC criteria**.
-* There is not significant improvement in R~2~(adj) by keeping frace:puerto_rican. * From this exploration, we will retain the following as a candidate model
-
-**bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken**
+bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken
 
 ```{r}
 leaps = leaps::regsubsets(bwt ~ ., data = bw)
+# View the ranked models according to the adjusted r-squared criteria and BIC, respectively
+# black indicates that a variable is included in the model, white not included. 
+plot(leaps, scale = "adjr2")
+plot(leaps, scale = "bic")
 
 fit2 = lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken, data = bw)
 summary(fit2)
-
-# View the ranked models according to the adjusted r-squared criteria and BIC, respectively
-# black indicates that a variable is included in the model, white not included. 
-# Model containing babysex, bhead, blength, delwt, gaweeks, smoken, pnumsga
-plot(leaps, scale = "adjr2")
-plot(leaps, scale = "bic")
 ```
 
-### Check Model Diagnostics for 2 Candidate Models
+###### Check Model Diagnostics for 2 Candidate Models
 
 **Candidate Models:**
 
-1. Stepwise Backward Elimination (same model as forward selection and stepwise regression)
+1. Stepwise Backward Elimination:
 bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome
 
-2. Based on adjusted R-square criteria. Removed frace since adds little benefit to adjR2. Keep all of mrace, since cannot only include one factor in variable
-bwt ~ babysex + bhead + blength + delwt + frace:puerto_rican + gaweeks + mraceblack + smoken + pnumsga 
+2. Optimize adjusted R~2~ criteria:
+bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken 
+
+For both models, we add residuals and predictions to the birthweight data
 
 ```{r}
 # Candidate 1: Stepwise Backward Elimination Model, 11 predictors
-fit_step = lm(bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + 
-    mheight + mrace + parity + ppwt + smoken, data = bw)
+fit_step = lm(bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome, data = bw)
 summary(fit_step)
 
 # add predictions and residuals to stepwise model
@@ -285,30 +250,15 @@ bw_fit_rs = modelr::add_predictions(bw, fit_rs, var = "pred_rs")
 bw_fit_rs = modelr::add_residuals(bw_fit_rs, fit_rs, var = "resid_rs")
 ```
 
-**Check Conditions:**
+**1. Normality of Residuals (error distribution)**
 
-1. linear relationship between (numerical) x and y
-    * each numerical explanatory variable should be linearly related to the response variable, birthweight
-    * check using residuals plot (e vs. x)
-    * look for random scatter around 0
-2. nearly normal residuals with mean 0
+1. Assess for nearly normal residuals with mean 0
     * on a residuals plot, we look for random scatter of residuals around 0, this translates to a nearly normal distribution of residuals centered at 0
-    * check using histogram of residuals or normal probability plot
-3. constant variability of residuals 
-    * check using residuals plots of residuals vs. predicted value (e vs. y_hat)
-        * residuals should be equally variable for low and high values of the predicted response variable
-        * residuals randomly scattered in a band with a constant width around 0 (no fan shaped)
-4. independent residuals 
+    * check using histogram of residuals and normal probability plot
 
-#### 1. linear relationship between explanatory variables (x) and response variable (y)
+Both candidate models have acceptible normality per Q-Q Plot and Histogram of Residuals
 
-Don't need to do this for assignment
-
-#### 2. Normality of Residuals (error distribution)
-
-Acceptible normality per Normal Q-Q Plot and Histogram of Residuals
-
-###### **Stepwise Model QQ-Plot & Histogram**
+**1a) Stepwise Model QQ-Plot & Histogram**
 ```{r}
 # evaluate normality of residuals with qq plot
 qqnorm(fit_step$residuals)
@@ -316,13 +266,9 @@ qqline(fit_step$residuals)
 
 # evaluate normality of residuals with histogram
 hist(fit_step$residuals)
-
-bw_fit_step %>% 
-  ggplot(aes(x = resid_step)) +
-  geom_histogram()
 ```
 
-###### **R-Square Model QQ-Plot & Histogram**
+**1b) R-Square Model QQ-Plot & Histogram**
 ```{r}
 # evaluate normality of residuals with qq plot
 qqnorm(fit_rs$residuals)
@@ -330,50 +276,39 @@ qqline(fit_rs$residuals)
 
 # evaluate normality of residuals with histogram
 hist(fit_rs$residuals)
-
-bw_fit_rs %>% 
-  ggplot(aes(x = resid_step)) +
-  geom_histogram()
 ```
 
-#### 3. **Homoscedasticity: Constant variance of residuals (errors)**
+**2. Homoscedasticity: Constant variance of residuals (errors)**
 
+2. Assess for constant variability of residuals 
+    * check using residuals plots of residuals vs. predicted value (e vs. y_hat)
+        * residuals should be equally variable for low and high values of the predicted response variable
+        * residuals randomly scattered in a band with a constant width around 0 (no fan shaped)
+        
+Both candidate models have reasonable homoscedasticity for birthweight values between 1500 to 4500 grams. The model does not do a great job at predicting birthweights at the lower end of the distribution, ~ below 1500 grams. 
 ```{r}
-bw_fit_rs %>% 
-  ggplot(aes(x = pred_rs, y = resid_rs)) +
-  geom_point(alpha = 0.3)
-
+# Stepwise Model: predicted value vs. residuals plot
 bw_fit_step %>% 
   ggplot(aes(x = pred_step, y = resid_step)) +
   geom_point(alpha = 0.3)
 
-# stepwise model: residuals plot of residuals vs. predicted value
-plot(fit_step$residuals ~ fit_step$fitted.values)
-
-# adjusted r-square model: residuals plot of residuals vs. predicted value
-plot(fit_rs$residuals ~ fit_rs$fitted.values)
+# R-square Model: predicted value vs. residuals plot
+bw_fit_rs %>% 
+  ggplot(aes(x = pred_rs, y = resid_rs)) +
+  geom_point(alpha = 0.3)
 ```
 
-#### 4. Independence of residuals (errors) - NA for assignment
+###### Optimize Parsimony and Assess Multicollinearity
+
+Both the backwards elimination model and adjusted r-squared model satisfied assumptions for 1) normality of residuals and 2) constant variance of residuals (between birthweights 1500-4500gram)
+
+Optimizing for parsimony, we will select the R~2~(adj) model with 7 predictors over the backwards elimination model with 11 predictors. 
+
+7 Predictor Model: bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken 
+
+Lastly, we will check for multicollinearity in the 7 predictor model using a 1) correlation matrix and 2) VIF (variance inflation factor) Scores, which measure how much of the variance of a regression coefficient is inflated due to multicollinearity within the model). We will drop variable pre-pregnancy BMI due to the high correlation coefficient (0.72) with variable delivery weight.
 
 ```{r}
-plot(fit_step$residuals)
-plot(fit_rs$residuals)
-```
-
-### Select Model
-
-Both the backwards elimination model and adjusted r-squared model satisfied assumptions for 1) normality of residuals and 2) constant variance of residuals.
-
-We prefer the parsimonious model, the simplest best model. Thus, we will select the R~2~(adj) model with 7 predictors over the backwards elimination model with 11 predictors.
-
-Lastly, we will check collinearity of variables in the 7 predictor model using a 1) correlation matrix and 2) VIF (variance inflation factor) Scores, which measure how much of the variance of a regression coefficient is inflated due to multicollinearity within the model. 
-
-```{r}
-fit_rs %>% broom::tidy() %>% knitr::kable()
-fit_rs %>% broom::glance() %>% knitr::kable()
-summary(fit_rs)
-
 # check for collinearity between numerical predictor variables
 bw_fit_rs %>% 
   select(bwt, bhead, blength, delwt, gaweeks, ppbmi, smoken) %>% 
@@ -383,7 +318,38 @@ bw_fit_rs %>%
 car::vif(fit_rs)
 ```
 
-### Cross-Validation Compare Models
+###### Final Proposed Model
+
+Dropping pre-pregnancy bmi only marginally decreases the R~2~(adj), from 0.716 to 0.713. The final proposed 6 predictor model satisfies regression assumptions for 1) normality of residuals and 2) constant variance of residuals
+
+bwt ~ bhead + blength + delwt + gaweeks + mrace + smoken
+
+```{r}
+# Final Model
+fit_final = lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + smoken, data = bw)
+summary(fit_final) %>% broom::tidy() %>% knitr::kable()
+summary(fit_final) %>% broom::glance() %>% knitr::kable()
+
+
+# Prediction vs Residuals Plot
+bw_fit_final = modelr::add_predictions(bw, fit_final, var = "pred")
+bw_fit_final = modelr::add_residuals(bw_fit_final, fit_final, var = "resid")
+
+bw_fit_final %>% 
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point(alpha = 0.3)
+
+# histogram of residuals
+bw_fit_final %>% 
+  ggplot(aes(x = resid)) +
+    geom_histogram()
+```
+
+### Problem 2.2 Cross-Validation, Compare Models
+
+We will use cross validation to compare the final proposed model (fit_final) with a two predictor model (blength, gaweeks) and three-way interaction model (bhead, blength, babysex). 
+
+Iteration for RMSE will be performed over 100 cross validation sets with a 80% training and 20% test split.
 
 ```{r}
 # two predictor model
@@ -399,23 +365,23 @@ summary(fit_3)
 cv_bw = modelr::crossv_mc(data = bw, n = 100, test = 0.2, id = "id")
 
 cv_bw = cv_bw %>% 
-  mutate(lm_rs = map(train, ~lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken, data = .x)),
-         lm_2 = map(train, ~lm(bwt ~ blength, gaweeks, data = bw)),
-         lm_3 = map(train, ~lm(bwt ~ bhead * blength * babysex, data = bw))) %>% 
-  mutate(rmse_rs = map2_dbl(lm_rs, test, ~rmse(model = .x, data = .y)),
-         rmse_2 = map2_dbl(lm_2, test, ~rmse(model = .x, data = .y)),
-         rmse_3 = map2_dbl(lm_3, test, ~rmse(model = .x, data = .y)))
+  mutate(lm_final = map(train, ~lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + smoken, data = .x)),
+         lm_2pred = map(train, ~lm(bwt ~ blength, gaweeks, data = .x)),
+         lm_3pred = map(train, ~lm(bwt ~ bhead * blength * babysex, data = .x))) %>% 
+  mutate(rmse_final = map2_dbl(lm_final, test, ~rmse(model = .x, data = .y)),
+         rmse_2pred = map2_dbl(lm_2pred, test, ~rmse(model = .x, data = .y)),
+         rmse_3pred = map2_dbl(lm_3pred, test, ~rmse(model = .x, data = .y)))
 ```
 
 Violin Plot of RMSE
+
+Proposed model has the lowest range of RMSE
 ```{r}
 cv_bw %>% 
   select(starts_with("rmse")) %>% 
   gather(key = model, value = rmse) %>% 
   mutate(
-    model = str_replace(model, "rmse_", ""),
-    model = str_replace(model, "2", "2_predictors"),
-    model = str_replace(model, "3", "3_predictors"),
+    model = str_replace(model, "rmse_", "model "),
     model = fct_reorder(model, rmse)) %>% 
   ggplot(aes(x = model, y = rmse)) + 
     geom_violin() +
