@@ -16,7 +16,9 @@ library(modelr)
 library(mgcv)
 
 knitr::opts_chunk$set(
-  collapse = TRUE)
+  collapse = TRUE, 
+  warning = FALSE, 
+  message = FALSE)
 
 set.seed(1)
 
@@ -31,11 +33,11 @@ To begin, we tidy the dataset as follows:
 
 * create city_state variable
 * omit observations from "Dallas, TX", "Phoenix, AZ", "Kansas City, MO" since these locations do not report victim race. 
-* Omit single "Tulsa, AL" observation due to erroneous entry. 
+* omit single "Tulsa, AL" observation due to erroneous entry. 
 * modify victim age to numeric variable
 * modify victim_race to two factor variable: white (reference) and non_white
 * modify victim_sex to factor variable: Male, Female, Unknown
-* create binary variable indicating whether homicide case is resolved: 0 = unsolved case, 1 = resolved case ("disposition = Closed by arrest") 
+* create a binary variable indicating whether homicide case is resolved: 0 = unsolved case, 1 = resolved case ("disposition = Closed by arrest") 
 
 ```{r}
 #load and tidy dataset
@@ -51,7 +53,7 @@ homicide_data = read_csv("./data/homicide-data.csv") %>%
   filter(!(city_state %in% c("Tulsa, AL", "Dallas, TX", "Phoenix, AZ", "Kansas City, MO")))
 ```
 
-### Problem 1.1 Baltimore, MD
+### Problem 1.1 - Baltimore, MD
 
 For the city of Baltimore, MD, we fit a logistic regression with resolved versus unsolved homicide as the outcome and victim age, sex, and race (white vs. non-white) as predictors. The odds of resolving a homicide case for a non-white victim is 0.452 (Odds Ratio 95% CI: 0.321, 0.636) times the odds of solving a homicide case for a white homicide victim, in Baltimore, keeping all other variables constant.
 
@@ -75,9 +77,7 @@ glm_baltimore %>% broom::tidy(conf.int = TRUE, exponentiate = TRUE) %>%
   knitr::kable(digits = 3)
 ```
 
-### Problem 1.2 All Cities
-
-The Odds Ratio and 95% Confidence Interval for solving a homicide case for a non-white victim versus a white victim is reported for 47 major US cities.
+### Problem 1.2 - All Cities
 
 ```{r, fig.width = 10, fig.height = 8}
 # Odds Ratio for victim_racenon_white in 47 cities
@@ -101,12 +101,11 @@ logfit_cities = homicide_data %>%
 # OR and 95% CI for each city
 logfit_cities %>% 
   arrange(OR) %>% 
+  head(10) %>% 
   knitr::kable(digits = 3)
 ```
 
-44 out of the 47 major cities had an odds ratio under 1, comparing the odds of resolving homicide case for non-white victim versus white victim. In other words, the likelihood of resolving a homicide event for a non-white victim is consistently less than the likelihood of resolving a homicide event of a white victim, across most major US cities.   
-
-In only three cities (Durham, NC; Birmingham, AL; Tampa, FL), the odds ratio was greater than 1. However, the CI lower limit for the odds ratio is less than 1 in these locations.
+The Odds Ratio and 95% Confidence Interval for solving a homicide case for a non-white victim versus a white victim is reported for lowest 10 of 47 major US cities.
 
 ```{r, fig.width = 10, fig.height = 6}
 # Odds Ratio plot for all cities
@@ -127,11 +126,15 @@ logfit_cities %>%
         legend.position = "none")
 ```
 
+44 out of the 47 major cities had an odds ratio under 1, comparing the odds of resolving homicide case for non-white victim versus white victim. In other words, the likelihood of resolving a homicide event for a non-white victim is consistently less than the likelihood of resolving a homicide event of a white victim, across most major US cities.   
+
+In only three cities (Durham, NC; Birmingham, AL; Tampa, FL), the odds ratio was greater than 1. However, the CI lower limit for the odds ratio is less than 1 in these locations.
+
 ### Problem 2.1 - Propose Model
 
 In this section, we will investigate the birthweight dataset and propose a regression model for birthweight. 
 
-First, we will explore the distribution of the main response. Next, we will select 2 model candidates from 1) stepwise backwards elimination and 2) optimization of the adjusted R~2~ criteria. Candidates will be assessed for linear regression model assumptions, normality of the residuals and homoscedasticity of residuals. Lastly, candidates will be compared for parsimony and assessed for multicollinearity. 
+First, we will explore the distribution of the main response. Next, we will select 2 model candidates from 1) stepwise backwards elimination and 2) optimization of the adjusted R~2~ criteria. Candidates will be assessed for linear regression model assumptions, including normality of the residuals and homoscedasticity of residuals. Lastly, candidates will be compared for parsimony and assessed for multicollinearity. 
 
 Data Cleaning Steps:
 
@@ -154,7 +157,7 @@ bw = bw %>%
   select(-pnumlbw, -pnumsga)
 ```
 
-#### **Birthweight Histogram*
+#### **Birthweight Histogram**
 
 Distribution of the main response birthweight approximates a normal distribution.
 
@@ -183,12 +186,12 @@ full
 step(full, data = bw, direction="backward")
 ```
 
-#### **regsubsets()** - regression subset selection
+#### **regsubsets() - regression subset selection**
 
 The all possible regressions approach considers all possible subsets of the pool of explanatory variables and finds the model that best fits the data according to some criterion, such as R~2~(adj) and BIC. 
 
-* Model containing explanatory variables *bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, ppbmi, and smoken* optimizes the **adjusted R~2~ criteria** and **BIC criteria**. 
-* The top 5 models in the R~2~(adj) plot have roughly the same R~2~(adj). Since there is marginal improvement in R~2~(adj) by including frace:puerto_rican, we will exclude father race (frace) entirely from the candidate model. 
+* The model containing explanatory variables "bhead, blength, delwt, frace:puerto_rican, gaweeks, mraceblack, ppbmi, and smoken" optimizes the **adjusted R~2~ criteria** and **BIC criteria**. 
+* The top 5 models in the R~2~(adj) plot have roughly the same R~2~(adj). Since there is only a marginal improvement in R~2~(adj) by including frace:puerto_rican, we will exclude father race (frace) entirely from the candidate model. 
 * Since we must include all factor levels within a variable, we will retain all factors for mother race (mrace). 
 
 From this exploration, we obtain 7-predictor Candidate Model 2: 
@@ -214,12 +217,11 @@ bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + par
 2. Candidate Model 2:
 bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken 
 
-For both candidate models, we add residuals and predictions to the birthweight data using modelr package.
+For both candidate models, we add residuals and predictions to the birthweight data using the modelr package.
 
 ```{r}
 # Candidate 1: Stepwise Backward Elimination Model, 11 predictors
 fit_step = lm(bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + babysex + parity + ppwt + fincome, data = bw)
-summary(fit_step)
 
 # add predictions and residuals to stepwise model
 bw_fit_step = modelr::add_predictions(bw, fit_step, var = "pred_step")
@@ -227,7 +229,6 @@ bw_fit_step = modelr::add_residuals(bw_fit_step, fit_step, var = "resid_step")
 
 # Candidate 2: adjusted R-square Model, 7 predictors
 fit_rs = lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken, data = bw)
-summary(fit_rs)
 
 # add predictions and residuals to adjusted r-square model
 bw_fit_rs = modelr::add_predictions(bw, fit_rs, var = "pred_rs")
@@ -241,7 +242,7 @@ bw_fit_rs = modelr::add_residuals(bw_fit_rs, fit_rs, var = "resid_rs")
 
 Both candidate models have acceptable normality per Q-Q Plot and Histogram of Residuals
 
-**1a) Candidate 1 QQ-Plot & Histogram**
+**1a) Candidate 1: QQ-Plot & Histogram**
 ```{r}
 # evaluate normality of residuals with qq plot
 qqnorm(fit_step$residuals)
@@ -251,7 +252,7 @@ qqline(fit_step$residuals)
 hist(fit_step$residuals)
 ```
 
-**1b) Candidate 2 QQ-Plot & Histogram**
+**1b) Candidate 2: QQ-Plot & Histogram**
 ```{r}
 # evaluate normality of residuals with qq plot
 qqnorm(fit_rs$residuals)
@@ -264,9 +265,9 @@ hist(fit_rs$residuals)
 **2. Homoscedasticity: Constant variance of residuals (errors)**
 
 * Assess for constant variability of residuals 
-* check using residuals plots of residuals vs. predicted value (e vs. y_hat)
-    * residuals should be equally variable for low and high values of the predicted response variable
-    * residuals randomly scattered in a band with a constant width around 0 (no fan shaped)
+* Check using residuals plots of residuals vs. predicted value (e vs. y_hat)
+    * Residuals should be equally variable for low and high values of the predicted response variable
+    * Residuals randomly scattered in a band with a constant width around 0 (no fan-shaped)
         
 Both candidate models have acceptable homoscedasticity for birthweight values between 1500 to 4500 grams. Residuals for model predictions below ~1500grams are skewed above 0. The model may need to be finetuned for lower birthweight predictions.
 ```{r}
@@ -289,10 +290,11 @@ Both the Candidate Model 1 and Model 2 satisfied assumptions for 1) normality of
 
 Optimizing for parsimony, we will select the 7-predictor Model 2 over the 11-predictor Model 1.
 
-Lastly, we will check for multicollinearity in the 7 predictor model using a 1) correlation matrix and 2) VIF (variance inflation factor) Scores, which measure how much of the variance of a regression coefficient is inflated due to multicollinearity within the model. 
+Lastly, we will check for multicollinearity in the 7 predictor model using a 1) correlation table and 2) VIF (variance inflation factor) Scores, which measure how much of the variance of a regression coefficient is inflated due to multicollinearity within the model. 
 
+We will drop variable pre-pregnancy BMI due to the high correlation coefficient (0.72) with variable delivery weight.
 ```{r}
-# check for collinearity between numerical predictor variables
+# correlation table
 bw_fit_rs %>% 
   select(bwt, bhead, blength, delwt, gaweeks, ppbmi, smoken) %>% 
   cor() %>% 
@@ -302,14 +304,13 @@ bw_fit_rs %>%
 car::vif(fit_rs) %>% knitr::kable()
 ```
 
-We will drop variable pre-pregnancy BMI due to the high correlation coefficient (0.72) with variable delivery weight.
-
 #### Final Proposed Model
 
-Dropping pre-pregnancy bmi only marginally decreases the R~2~(adj), from 0.716 to 0.713. The final 6 Predictor Model satisfies regression assumptions for 1) normality of residuals and 2) constant variance of residuals
+Dropping pre-pregnancy bmi only marginally decreased the R~2~(adj), from 0.716 to 0.713. The final 6 Predictor Model satisfies regression assumptions for 1) normality of residuals and 2) constant variance of residuals.
 
 **Final Model**: bwt ~ bhead + blength + delwt + gaweeks + mrace + smoken
 
+Coefficient Estimates and R~2~ values below:
 ```{r}
 # Final Model Coefficients
 fit_final = lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + smoken, data = bw)
@@ -323,7 +324,10 @@ bw_fit_final = modelr::add_residuals(bw_fit_final, fit_final, var = "resid")
 bw_fit_final %>% 
   ggplot(aes(x = pred, y = resid)) +
   geom_point(alpha = 0.3) +
-  labs(title = "Final Proposed Model, Residuals Plot")
+  labs(
+    title = "Final Proposed Model, Residuals Plot",
+    x = "predicted value",
+    y = "residuals")
 
 # histogram of residuals
 bw_fit_final %>% 
@@ -331,11 +335,11 @@ bw_fit_final %>%
     geom_histogram()
 ```
 
-### Problem 2.2 Cross-Validation
+### Problem 2.2 - Cross-Validation
 
-We will use cross validation to compare the final proposed model (fit_final) with a two predictor model (blength, gaweeks) and three-way interaction model (bhead, blength, babysex). 
+We will use cross-validation to compare the final proposed model (fit_final) with a two predictor model (blength, gaweeks) and three-way interaction model (bhead, blength, babysex). 
 
-Iteration for RMSE will be performed over 100 cross validation folds with a 80% training and 20% test split.
+Iteration for RMSE will be performed over 100 cross-validation folds with an 80% training and 20% test split.
 
 ```{r}
 # two predictor model
